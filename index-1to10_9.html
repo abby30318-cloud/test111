@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>台灣手語 AI 測驗系統</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans TC', sans-serif;
+    background: #0f172a;
+    color: #f1f5f9;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  header {
+    width: 100%;
+    padding: 1rem 1.25rem 0.75rem;
+    text-align: center;
+    background: linear-gradient(180deg, #1e293b 0%, transparent 100%);
+  }
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #7dd3fc;
+  }
+  header p { font-size: 0.8rem; color: #94a3b8; margin-top: 0.2rem; }
+
+  #main {
+    width: 100%;
+    max-width: 480px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex: 1;
+  }
+
+  /* Score Bar */
+  #scorebar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+  }
+  .score-item { text-align: center; }
+  .score-label { font-size: 0.7rem; color: #64748b; }
+  .score-value { font-size: 1.4rem; font-weight: 700; color: #f1f5f9; }
+  #progress-bar-wrap {
+    flex: 1;
+    margin: 0 0.75rem;
+    height: 8px;
+    background: #334155;
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
+    border-radius: 99px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+
+  /* Question Card */
+  #question-card {
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 1.25rem;
+    text-align: center;
+    border: 1px solid #334155;
+  }
+  #question-label { font-size: 0.75rem; color: #64748b; margin-bottom: 0.4rem; }
+  #question-number {
+    font-size: 5rem;
+    font-weight: 900;
+    line-height: 1;
+    background: linear-gradient(135deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  #question-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem; }
+
+  /* Feedback Badge */
+  #feedback {
+    text-align: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    min-height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 10px;
+    padding: 0.5rem;
+    transition: background 0.2s;
+  }
+  #feedback.correct { background: #14532d; color: #4ade80; }
+  #feedback.wrong   { background: #450a0a; color: #f87171; }
+  #feedback.idle    { background: transparent; color: #64748b; }
+
+  /* Camera Section */
+  #camera-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #0f172a;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid #334155;
+  }
+  #video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    display: block;
+  }
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+  }
+  #detect-label {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    color: #38bdf8;
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 0.3rem 0.8rem;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+  #loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: #0f172a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    z-index: 10;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid #334155;
+    border-top-color: #38bdf8;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-text { font-size: 0.85rem; color: #94a3b8; }
+
+  /* Buttons */
+  #btn-start {
+    width: 100%;
+    padding: 0.9rem;
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.05em;
+  }
+  #btn-start:active { transform: scale(0.97); opacity: 0.9; }
+  #btn-start:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Result Screen */
+  #result-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 2rem 1.25rem;
+    text-align: center;
+    border: 1px solid #334155;
+  }
+  #result-emoji { font-size: 3.5rem; }
+  #result-title { font-size: 1.4rem; font-weight: 700; color: #7dd3fc; }
+  #result-detail { font-size: 0.9rem; color: #94a3b8; }
+  #result-score { font-size: 3rem; font-weight: 900; color: #f1f5f9; }
+
+  #instructions {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 1rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    line-height: 1.7;
+    border: 1px solid #334155;
+  }
+  #instructions b { color: #7dd3fc; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤟 台灣手語 AI 測驗</h1>
+  <p>MediaPipe 手部追蹤 · 數字 1–10</p>
+</header>
+
+<div id="main">
+  <div id="scorebar">
+    <div class="score-item">
+      <div class="score-label">得分</div>
+      <div class="score-value" id="score-val">0</div>
+    </div>
+    <div id="progress-bar-wrap">
+      <div id="progress-bar"></div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">題數</div>
+      <div class="score-value"><span id="q-current">0</span>/10</div>
+    </div>
+  </div>
+
+  <div id="question-card">
+    <div id="question-label">請比出手語數字</div>
+    <div id="question-number">—</div>
+    <div id="question-hint">按下「開始測驗」</div>
+  </div>
+
+  <div id="feedback" class="idle">等待攝影機...</div>
+
+  <div id="camera-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="detect-label">偵測中...</div>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div id="loading-text">載入 AI 模型中...</div>
+    </div>
+  </div>
+
+  <button id="btn-start" disabled>載入中...</button>
+
+  <div id="result-screen">
+    <div id="result-emoji">🏆</div>
+    <div id="result-title">測驗完成！</div>
+    <div id="result-score">0/10</div>
+    <div id="result-detail">準確率 0%</div>
+    <button id="btn-restart" style="
+      padding: 0.7rem 2rem;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      border: none; border-radius: 10px;
+      color: white; font-size: 1rem; font-weight: 700; cursor: pointer;
+    ">再玩一次</button>
+  </div>
+
+  <div id="instructions">
+    <b>使用說明</b><br>
+    1️⃣ 允許攝影機權限<br>
+    2️⃣ 按「開始測驗」<br>
+    3️⃣ 對著鏡頭比出題目數字<br>
+    4️⃣ 保持 1 秒讓 AI 辨識<br><br>
+    <b>台灣手語數字提示：</b><br>
+    1 = 食指伸直，其餘握拳<br>
+    2 = 食指＋中指伸直，其餘收<br>
+    3 = 食中無名指伸直，拇指＋小指收起相扣<br>
+    4 = 四指全開，拇指收<br>
+    5 = 拇指伸直，其餘四指握拳，手心朝下<br>
+    6 = 拇指＋食指伸直呈L形，其餘三指收<br>
+    7 = 拇指＋食指＋中指伸直，無名＋小指收<br>
+    8 = 拇指＋食中無名四指伸直，小指收<br>
+    9 = 四指併攏彎曲，手心朝自己<br>
+    10 = 食指彎曲成勾狀
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingText = document.getElementById('loading-text');
+const btnStart = document.getElementById('btn-start');
+const btnRestart = document.getElementById('btn-restart');
+const questionNumber = document.getElementById('question-number');
+const questionHint = document.getElementById('question-hint');
+const feedback = document.getElementById('feedback');
+const detectLabel = document.getElementById('detect-label');
+const scoreVal = document.getElementById('score-val');
+const qCurrent = document.getElementById('q-current');
+const progressBar = document.getElementById('progress-bar');
+const resultScreen = document.getElementById('result-screen');
+const resultEmoji = document.getElementById('result-emoji');
+const resultScore = document.getElementById('result-score');
+const resultDetail = document.getElementById('result-detail');
+
+let hands = null;
+let camera = null;
+let gameActive = false;
+let currentQ = 0;
+let score = 0;
+const TOTAL_Q = 10;
+let targetNum = null;
+let lastDetected = null;
+let holdStart = null;
+const HOLD_MS = 800;
+let answered = false;
+let correctStreak = 0;
+
+function randomTarget() {
+  return Math.floor(Math.random() * 10) + 1;
+}
+
+// ─── Finger state helpers ───
+function isFingerExtended(L, tipIdx, pipIdx) {
+  return L[tipIdx].y < L[pipIdx].y;
+}
+
+function isFingerCurled(L, tipIdx, mcpIdx) {
+  return L[tipIdx].y > L[mcpIdx].y;
+}
+
+function isThumbExtended(L) {
+  // In mirrored camera: thumb tip further left than IP = open
+  return L[4].x < L[3].x;
+}
+
+// ─── TSL-specific classifier (1–10) ───
+function classifyTSL(landmarks) {
+  const L = landmarks;
+  if (!L || L.length < 21) return null;
+
+  const wrist = L[0];
+  const handSize = Math.hypot(L[9].x - wrist.x, L[9].y - wrist.y);
+  if (handSize < 0.01) return null;
+
+  function tipToMCP(ti, mi) {
+    return Math.hypot(L[ti].x - L[mi].x, L[ti].y - L[mi].y) / handSize;
+  }
+  function tipToPIP(ti, pi) {
+    return Math.hypot(L[ti].x - L[pi].x, L[ti].y - L[pi].y) / handSize;
+  }
+
+  const iIdx = tipToMCP(8, 5);
+  const mIdx = tipToMCP(12, 9);
+  const rIdx = tipToMCP(16, 13);
+  const pIdx = tipToMCP(20, 17);
+
+  // 手心朝向：用手掌三點的叉積判斷（更穩定）
+  // L[5]=食指根, L[17]=小指根, L[0]=手腕
+  // 叉積 z 分量決定手心朝向
+  const v1x = L[5].x - L[0].x, v1y = L[5].y - L[0].y;
+  const v2x = L[17].x - L[0].x, v2y = L[17].y - L[0].y;
+  const cross = v1x * v2y - v1y * v2x;
+  // 自拍鏡像下，cross>0 表示手心朝外
+  const palmFacingOut = cross > 0;
+
+  // 手的方向
+  const adx = Math.abs(L[5].x - wrist.x);
+  const ady = Math.abs(L[5].y - wrist.y);
+  const handSideways = adx > ady * 0.5;
+
+  // 拇指展開
+  const thumbDist = Math.hypot(L[4].x - L[5].x, L[4].y - L[5].y) / handSize;
+  const thumbSpread = thumbDist > 0.70;
+
+  // 低閾值（1~8）
+  const index  = iIdx > 0.60;
+  const middle = mIdx > 0.60;
+  const ring   = rIdx > 0.60;
+  const pinky  = pIdx > 0.60;
+  const indexC  = iIdx < 0.50;
+  const middleC = mIdx < 0.50;
+  const pinkyC  = pIdx < 0.50;
+
+  // 高閾值（9）
+  const indexI  = iIdx > 0.90;
+  const middleI = mIdx > 0.90;
+  const ringI   = rIdx > 0.90;
+  const pinkyI  = pIdx > 0.90;
+
+  // 十：食指彎勾
+  const indexHooked = tipToPIP(8, 6) < 0.35 && !middle && !ring && !pinky && !thumbSpread;
+
+  // ── 5：拇指伸出，四指收攏（優先於10）──
+  const thumbOut5 = thumbDist > 0.55;
+  if (thumbOut5 && iIdx < 0.65 && mIdx < 0.65 && rIdx < 0.65 && pIdx < 0.65) return 5;
+
+  // ── 10 ──
+  if (indexHooked) return 10;
+
+  // ── 1 ──
+  if (index && !middle && !ring && !pinky && palmFacingOut) return 1;
+
+  // ── 2 ──
+  if (index && middle && rIdx < 0.55 && pinkyC && palmFacingOut) return 2;
+
+  // ── 9：四指，手心朝內 ──
+  const ringLow = rIdx > 0.45;
+  const pinkyLow = pIdx > 0.45;
+  if (index && middle && ringLow && pinkyLow && !palmFacingOut) return 9;
+
+  // ── 3：食中無名伸直，小指收，手心朝外 ──
+  if (index && middle && ring && pinkyC && palmFacingOut) return 3;
+
+  // ── 4：四指伸直，手心朝外 ──
+  if (index && middle && ring && pinky && palmFacingOut) return 4;
+
+  // ── 6：食指伸直，手心朝內 ──
+  if (index && !middle && !ring && !pinky && !palmFacingOut) return 6;
+
+  // ── 7：食中伸直，無名小收，手心朝內 ──
+  if (index && middle && rIdx < 0.55 && pinkyC && !palmFacingOut) return 7;
+
+  // ── 8：食中無名伸直，小指收，手心朝內 ──
+  if (index && middle && ring && pinkyC && !palmFacingOut) return 8;
+
+  return null;
+}
+
+// ─── MediaPipe Setup ───
+function initMediaPipe() {
+  loadingText.textContent = '載入 AI 模型中...';
+  hands = new Hands({ locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+  });
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.75,
+    minTrackingConfidence: 0.6,
+  });
+  hands.onResults(onResults);
+  hands.initialize().then(() => {
+    loadingText.textContent = '啟動攝影機...';
+    startCamera();
+  }).catch(e => {
+    loadingText.textContent = '模型載入失敗，請重新整理';
+    console.error(e);
+  });
+}
+
+function startCamera() {
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false })
+    .then(stream => {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        loadingOverlay.style.display = 'none';
+        btnStart.textContent = '開始測驗';
+        btnStart.disabled = false;
+        feedback.textContent = '準備好了！按「開始測驗」';
+        feedback.className = 'idle';
+        startProcessing();
+      };
+    })
+    .catch(e => {
+      loadingText.textContent = '無法存取攝影機，請確認權限';
+      console.error(e);
+    });
+}
+
+function startProcessing() {
+  async function process() {
+    await hands.send({ image: video });
+    requestAnimationFrame(process);
+  }
+  process();
+}
+
+function onResults(results) {
+  ctx.save();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const lm = results.multiHandLandmarks[0];
+    drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#38bdf8', lineWidth: 2 });
+    drawLandmarks(ctx, lm, { color: '#818cf8', lineWidth: 1, radius: 4 });
+
+    const detected = classifyTSL(lm);
+    lastDetected = detected;
+    const L = lm;
+    const wrist = L[0];
+    const hSize = Math.hypot(L[9].x - wrist.x, L[9].y - wrist.y);
+    const tDist = Math.hypot(L[4].x - L[5].x, L[4].y - L[5].y);
+    const tSpread = hSize > 0 && (tDist / hSize) > 0.7;
+    const fi = isFingerExtended(L,8,6), fm = isFingerExtended(L,12,10);
+    const fr = isFingerExtended(L,16,14), fp = isFingerExtended(L,20,18);
+    const v1x2 = L[5].x-L[0].x, v1y2 = L[5].y-L[0].y;
+    const v2x2 = L[17].x-L[0].x, v2y2 = L[17].y-L[0].y;
+    const cross2 = (v1x2*v2y2 - v1y2*v2x2).toFixed(3);
+    const palmOut2 = (v1x2*v2y2 - v1y2*v2x2) > 0;
+    function t2m(ti, mi) { return Math.hypot(L[ti].x-L[mi].x, L[ti].y-L[mi].y) / Math.hypot(L[9].x-L[0].x, L[9].y-L[0].y); }
+    const di = t2m(8,5).toFixed(2), dm = t2m(12,9).toFixed(2), dr = t2m(16,13).toFixed(2);
+    const tdist = (Math.hypot(L[4].x-L[5].x, L[4].y-L[5].y) / Math.hypot(L[9].x-L[0].x, L[9].y-L[0].y)).toFixed(2);
+    detectLabel.textContent = `食${di} 中${dm} 無${dr} 拇${tdist} 叉${cross2} ${palmOut2?'朝外':'朝內'} → ${detected ?? '?'}`;
+
+    if (gameActive && !answered && detected !== null) {
+      if (detected === targetNum) {
+        if (!holdStart) holdStart = Date.now();
+        const held = Date.now() - holdStart;
+        const pct = Math.min(held / HOLD_MS, 1);
+        // Draw hold ring
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2, canvas.height / 2, 40, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * pct);
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        if (held >= HOLD_MS) markAnswer(true);
+      } else {
+        holdStart = null;
+      }
+    }
+  } else {
+    detectLabel.textContent = '找不到手，請對準鏡頭';
+    holdStart = null;
+    lastDetected = null;
+  }
+  ctx.restore();
+}
+
+// ─── Game Logic ───
+function startGame() {
+  currentQ = 0;
+  score = 0;
+  answered = false;
+  holdStart = null;
+  gameActive = false;
+  resultScreen.style.display = 'none';
+  document.getElementById('question-card').style.display = '';
+  document.getElementById('scorebar').style.display = '';
+  updateHUD();
+  nextQuestion();
+}
+
+function nextQuestion() {
+  if (currentQ >= TOTAL_Q) {
+    endGame(); return;
+  }
+  answered = false;
+  holdStart = null;
+  targetNum = randomTarget();
+  currentQ++;
+  questionNumber.textContent = targetNum;
+  questionHint.textContent = '比出這個數字的手語！';
+  setFeedback('idle', `第 ${currentQ} 題 / 保持手勢 0.8 秒`);
+  gameActive = true;
+  updateHUD();
+}
+
+function markAnswer(correct) {
+  answered = true;
+  gameActive = false;
+  holdStart = null;
+  if (correct) {
+    score++;
+    setFeedback('correct', '✅ 答對了！');
+  } else {
+    setFeedback('wrong', '❌ 答錯了！');
+  }
+  updateHUD();
+  setTimeout(() => nextQuestion(), 1200);
+}
+
+function endGame() {
+  gameActive = false;
+  targetNum = null;
+  questionNumber.textContent = '—';
+  questionHint.textContent = '測驗結束！';
+  setFeedback('idle', '');
+
+  const pct = Math.round(score / TOTAL_Q * 100);
+  resultEmoji.textContent = pct >= 80 ? '🏆' : pct >= 60 ? '👍' : '💪';
+  resultScore.textContent = `${score}/${TOTAL_Q}`;
+  resultDetail.textContent = `準確率 ${pct}%`;
+  resultScreen.style.display = 'flex';
+  document.getElementById('question-card').style.display = 'none';
+  document.getElementById('scorebar').style.display = 'none';
+  btnStart.textContent = '開始測驗';
+}
+
+function updateHUD() {
+  scoreVal.textContent = score;
+  qCurrent.textContent = currentQ;
+  progressBar.style.width = (currentQ / TOTAL_Q * 100) + '%';
+}
+
+function setFeedback(cls, text) {
+  feedback.className = cls;
+  feedback.textContent = text;
+}
+
+btnStart.addEventListener('click', startGame);
+btnRestart.addEventListener('click', startGame);
+
+// Boot
+window.addEventListener('load', () => {
+  setTimeout(initMediaPipe, 300);
+});
+</script>
+</body>
+</html>
